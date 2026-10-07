@@ -10,8 +10,19 @@ import {
   Upload,
   RotateCcw,
   Sparkles,
+  Trash2,
+  HardDrive,
+  ShieldCheck,
+  AlertTriangle,
 } from 'lucide-react';
-import { AppSettings, saveAppSettings, resetToSeedReports, saveReports } from '../utils/storage';
+import {
+  AppSettings,
+  saveAppSettings,
+  saveReports,
+  purgeAllDemoData,
+  clearAllLocalData,
+  getStorageUsageSummary,
+} from '../utils/storage';
 import { AnalysisReport } from '../types/telaah';
 
 interface SettingsViewProps {
@@ -29,7 +40,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 }) => {
   const [formData, setFormData] = useState<AppSettings>({ ...settings });
   const [savedToast, setSavedToast] = useState<boolean>(false);
-  const [resetToast, setResetToast] = useState<boolean>(false);
+  const [toastMessage, setToastMessage] = useState<string>('');
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(''), 3500);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -47,6 +63,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     document.body.appendChild(a);
     a.click();
     a.remove();
+    showToast('Berkas cadangan JSON berhasil diunduh ke perangkat Anda.');
   };
 
   const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -60,7 +77,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         if (Array.isArray(parsed)) {
           saveReports(parsed);
           onReloadReports();
-          alert(`Berhasil mengimpor ${parsed.length} riwayat telaah RPP.`);
+          showToast(`Berhasil memuat ${parsed.length} riwayat telaah RPP dari berkas cadangan.`);
         } else {
           alert('Format berkas cadangan JSON tidak valid.');
         }
@@ -69,39 +86,58 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       }
     };
     reader.readAsText(file);
+    // Reset file input
+    e.target.value = '';
   };
 
-  const handleResetToSeed = () => {
-    if (confirm('Apakah Anda ingin memulihkan 3 data contoh RPP awal (SD, SMP, SMA)? Data riwayat saat ini akan diperbarui.')) {
-      resetToSeedReports();
+  const handlePurgeDemo = () => {
+    if (confirm('Hapus seluruh data demo / contoh awal dari penyimpanan lokal perangkat ini?')) {
+      const res = purgeAllDemoData();
       onReloadReports();
-      setResetToast(true);
-      setTimeout(() => setResetToast(false), 3000);
+      showToast(
+        res.purgedCount > 0
+          ? `Berhasil membersihkan ${res.purgedCount} data demo. Menyisakan ${res.remainingReports.length} dokumen asli.`
+          : 'Semua data demo sudah bersih dari perangkat Anda.'
+      );
     }
   };
+
+  const handleClearAllStorage = () => {
+    if (
+      confirm(
+        'PERINGATAN: Apakah Anda yakin ingin mengosongkan SELURUH riwayat telaah di perangkat ini? Tindakan ini tidak dapat dibatalkan kecuali Anda telah mengunduh berkas cadangan JSON.'
+      )
+    ) {
+      clearAllLocalData();
+      onReloadReports();
+      showToast('Seluruh data di Local Storage perangkat ini telah berhasil dikosongkan.');
+    }
+  };
+
+  const storageSummary = getStorageUsageSummary();
 
   return (
     <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in duration-300">
       <div className="border-b border-slate-200 pb-5">
         <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-          PENGATURAN APLIKASI TELAAH RPP
+          PENGATURAN APLIKASI &amp; PENYIMPANAN
         </h1>
         <p className="text-xs text-slate-500 mt-1">
-          Atur profil default penelaah kurikulum dan kelola pencadangan data
+          Kelola profil penelaah, penyimpanan lokal di perangkat masing-masing, dan pencadangan data
         </p>
       </div>
 
       {savedToast && (
         <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold flex items-center gap-2">
           <Check className="w-4 h-4 text-emerald-600" />
-          Pengaturan berhasil disimpan!
+          Profil penelaah berhasil disimpan!
         </div>
       )}
 
-      {resetToast && (
+      {toastMessage && (
         <div className="p-3.5 rounded-2xl bg-sky-50 border border-sky-200 text-sky-800 text-xs font-semibold flex items-center gap-2">
           <Check className="w-4 h-4 text-sky-600" />
-          Data contoh awal (SD, SMP, SMA) berhasil dimuat kembali!
+          {toastMessage}
         </div>
       )}
 
@@ -164,53 +200,87 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </div>
       </form>
 
-      {/* Cadangan & Pemulihan Data */}
-      <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-xs space-y-4">
-        <h2 className="text-sm font-bold text-slate-900 uppercase tracking-tight flex items-center gap-2">
-          <FileText className="w-4 h-4 text-emerald-600" />
-          Cadangan &amp; Pemulihan Data Telaah
-        </h2>
-        <p className="text-xs text-slate-500">
-          Ekspor semua riwayat telaah yang tersimpan ke format JSON atau pulihkan data dari cadangan sebelumnya.
-        </p>
+      {/* Status Penyimpanan Data di Device / Local Storage */}
+      <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-xs space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-bold text-slate-900 uppercase tracking-tight flex items-center gap-2">
+              <HardDrive className="w-4 h-4 text-emerald-600" />
+              Penyimpanan Data di Perangkat (Local Storage)
+            </h2>
+            <p className="text-xs text-slate-500 mt-1">
+              Data disimpan secara aman dan privat di browser perangkat Anda sendiri
+            </p>
+          </div>
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 self-start sm:self-auto">
+            <ShieldCheck className="w-3.5 h-3.5" />
+            100% Offline &amp; Privat di Perangkat
+          </span>
+        </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+        <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 text-xs text-slate-700 leading-relaxed space-y-2">
+          <p>
+            <strong>Prinsip Keamanan Data:</strong> Seluruh berkas RPP yang Anda telaah, nilai 22 indikator, catatan telaah, nama guru, NIP, dan berita acara supervisi disimpan langsung di <strong>Local Storage</strong> perangkat komputer/ponsel Anda.
+          </p>
+          <div className="flex flex-wrap items-center gap-4 pt-2 text-[11px] text-slate-600 font-medium border-t border-slate-200/60">
+            <span>• Dokumen Aktif: <strong>{reports.length} naskah</strong></span>
+            <span>• Tempat Sampah: <strong>{storageSummary.recycleCount} naskah</strong></span>
+            <span>• Perkiraan Ukuran: <strong>{storageSummary.estimatedKb} KB</strong></span>
+          </div>
+        </div>
+
+        {/* Tombol Cadangan & Hapus */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-1">
           <button
             type="button"
             onClick={handleExportAll}
-            className="p-4 rounded-2xl bg-slate-50 hover:bg-emerald-50 border border-slate-200 hover:border-emerald-200 text-left transition-colors space-y-1"
+            className="p-4 rounded-2xl bg-emerald-50/70 hover:bg-emerald-100/70 border border-emerald-200 text-left transition-colors space-y-1.5"
           >
-            <div className="flex items-center gap-2 font-bold text-xs text-slate-900">
-              <Download className="w-4 h-4 text-emerald-600" />
+            <div className="flex items-center gap-2 font-bold text-xs text-emerald-900">
+              <Download className="w-4 h-4 text-emerald-700" />
               Ekspor Cadangan (JSON)
             </div>
-            <p className="text-[11px] text-slate-500">
-              Unduh seluruh {reports.length} naskah hasil telaah
+            <p className="text-[11px] text-emerald-700">
+              Unduh salinan cadangan ke penyimpanan perangkat Anda
             </p>
           </button>
 
-          <label className="p-4 rounded-2xl bg-slate-50 hover:bg-teal-50 border border-slate-200 hover:border-teal-200 text-left transition-colors cursor-pointer space-y-1 block">
+          <label className="p-4 rounded-2xl bg-teal-50/70 hover:bg-teal-100/70 border border-teal-200 text-left transition-colors cursor-pointer space-y-1.5 block">
             <input type="file" accept=".json" onChange={handleImportFile} className="hidden" />
-            <div className="flex items-center gap-2 font-bold text-xs text-slate-900">
-              <Upload className="w-4 h-4 text-teal-600" />
+            <div className="flex items-center gap-2 font-bold text-xs text-teal-900">
+              <Upload className="w-4 h-4 text-teal-700" />
               Impor Cadangan (JSON)
             </div>
-            <p className="text-[11px] text-slate-500">
-              Muat riwayat dari file JSON lokal
+            <p className="text-[11px] text-teal-700">
+              Pulihkan data riwayat dari berkas JSON di perangkat
             </p>
           </label>
 
           <button
             type="button"
-            onClick={handleResetToSeed}
-            className="p-4 rounded-2xl bg-slate-50 hover:bg-sky-50 border border-slate-200 hover:border-sky-200 text-left transition-colors space-y-1"
+            onClick={handlePurgeDemo}
+            className="p-4 rounded-2xl bg-amber-50/70 hover:bg-amber-100/70 border border-amber-200 text-left transition-colors space-y-1.5"
           >
-            <div className="flex items-center gap-2 font-bold text-xs text-slate-900">
-              <RotateCcw className="w-4 h-4 text-sky-600" />
-              Muat Ulang Contoh RPP
+            <div className="flex items-center gap-2 font-bold text-xs text-amber-900">
+              <Trash2 className="w-4 h-4 text-amber-700" />
+              Hapus Semua Data Demo
             </div>
-            <p className="text-[11px] text-slate-500">
-              Reset ke 3 contoh RPP awal
+            <p className="text-[11px] text-amber-700">
+              Bersihkan seluruh data contoh agar tersisa data asli
+            </p>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleClearAllStorage}
+            className="p-4 rounded-2xl bg-rose-50/70 hover:bg-rose-100/70 border border-rose-200 text-left transition-colors space-y-1.5"
+          >
+            <div className="flex items-center gap-2 font-bold text-xs text-rose-900">
+              <AlertTriangle className="w-4 h-4 text-rose-700" />
+              Kosongkan Local Storage
+            </div>
+            <p className="text-[11px] text-rose-700">
+              Hapus semua riwayat telaah di perangkat ini
             </p>
           </button>
         </div>

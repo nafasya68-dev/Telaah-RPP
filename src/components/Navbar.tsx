@@ -1,5 +1,5 @@
 import React from 'react';
-import { BookOpenCheck, Sparkles, Menu, PlusCircle, UserCheck, GitCompare } from 'lucide-react';
+import { BookOpenCheck, Sparkles, Menu, PlusCircle, UserCheck, GitCompare, HardDrive } from 'lucide-react';
 import { AppSettings } from '../utils/storage';
 
 interface NavbarProps {
@@ -51,7 +51,12 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
 
           {/* Right: Reviewer Badge & Primary Action */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5 sm:gap-3">
+            <div className="hidden xl:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200/80 text-[11px] font-bold text-slate-700" title="Semua data tersimpan privat di Local Storage perangkat Anda">
+              <HardDrive className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Local Storage</span>
+            </div>
+
             <div className="hidden lg:flex items-center gap-2.5 px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200/80">
               <div className="w-7 h-7 rounded-lg bg-teal-100 text-teal-800 flex items-center justify-center font-bold text-xs">
                 <UserCheck className="w-4 h-4" />

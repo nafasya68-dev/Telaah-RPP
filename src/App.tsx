@@ -83,6 +83,9 @@ export default function App() {
     } else if (selectedReport) {
       const match = stored.find((r) => r.id === selectedReport.id);
       if (match) setSelectedReport(match);
+      else setSelectedReport(stored.length > 0 ? stored[0] : null);
+    } else if (stored.length === 0) {
+      setSelectedReport(null);
     }
   };
 

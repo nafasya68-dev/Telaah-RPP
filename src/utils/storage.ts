@@ -6,6 +6,32 @@ import { calculateSummary, buildPriorities } from '../data/instruments';
 const STORAGE_KEY_REPORTS = 'telaah_rpp_reports_v2';
 const STORAGE_KEY_RECYCLE = 'telaah_rpp_recycle_v2';
 const STORAGE_KEY_SETTINGS = 'telaah_rpp_settings_v2';
+const STORAGE_KEY_DEMO_PURGED = 'telaah_rpp_demo_purged_v3';
+
+export const DEMO_REPORT_IDS = new Set([
+  'report-sample-1',
+  'report-sample-2',
+  'report-sample-3',
+  'report-rifa-awal',
+  'report-rifa-revisi',
+]);
+
+export function isDemoReport(report: AnalysisReport): boolean {
+  if (!report || !report.id) return false;
+  if (DEMO_REPORT_IDS.has(report.id)) return true;
+  if (report.id.startsWith('report-sample-')) return true;
+  const fileName = (report.fileName || '').toLowerCase();
+  if (
+    fileName === 'modul_ajar_ipas_kelas5_ekosistem.pdf' ||
+    fileName === 'modul_ajar_matematika_fased_pythagoras.docx' ||
+    fileName === 'rpp_bahasa_indonesia_kelas10_lho.docx' ||
+    fileName === 'rpp_biologi_ekosistem_draf_awal.docx' ||
+    fileName === 'rpp_biologi_ekosistem_hasil_revisi_siklus1.docx'
+  ) {
+    return true;
+  }
+  return false;
+}
 
 export interface AppSettings {
   defaultReviewerName: string;
@@ -119,36 +145,94 @@ function sanitizeStoredReport(rep: AnalysisReport): AnalysisReport {
   };
 }
 
+export function purgeAllDemoData(): { remainingReports: AnalysisReport[]; purgedCount: number } {
+  try {
+    const rawReports = localStorage.getItem(STORAGE_KEY_REPORTS);
+    const rawRecycle = localStorage.getItem(STORAGE_KEY_RECYCLE);
+
+    const activeList: AnalysisReport[] = rawReports ? JSON.parse(rawReports) : [];
+    const recycleList: AnalysisReport[] = rawRecycle ? JSON.parse(rawRecycle) : [];
+
+    const filteredActive = activeList.filter((r) => !isDemoReport(r));
+    const filteredRecycle = recycleList.filter((r) => !isDemoReport(r));
+
+    const purgedCount =
+      activeList.length - filteredActive.length + (recycleList.length - filteredRecycle.length);
+
+    localStorage.setItem(STORAGE_KEY_REPORTS, JSON.stringify(filteredActive));
+    localStorage.setItem(STORAGE_KEY_RECYCLE, JSON.stringify(filteredRecycle));
+    localStorage.setItem(STORAGE_KEY_DEMO_PURGED, 'true');
+
+    return { remainingReports: filteredActive, purgedCount };
+  } catch (e) {
+    console.error('Failed purging demo data:', e);
+    return { remainingReports: [], purgedCount: 0 };
+  }
+}
+
+export function clearAllLocalData(): void {
+  try {
+    localStorage.setItem(STORAGE_KEY_REPORTS, JSON.stringify([]));
+    localStorage.setItem(STORAGE_KEY_RECYCLE, JSON.stringify([]));
+    localStorage.setItem(STORAGE_KEY_DEMO_PURGED, 'true');
+  } catch (e) {
+    console.error('Failed clearing local data:', e);
+  }
+}
+
+export interface StorageSummary {
+  activeCount: number;
+  recycleCount: number;
+  estimatedKb: number;
+  storageType: string;
+}
+
+export function getStorageUsageSummary(): StorageSummary {
+  try {
+    const rawReports = localStorage.getItem(STORAGE_KEY_REPORTS) || '[]';
+    const rawRecycle = localStorage.getItem(STORAGE_KEY_RECYCLE) || '[]';
+    const active: AnalysisReport[] = JSON.parse(rawReports);
+    const recycle: AnalysisReport[] = JSON.parse(rawRecycle);
+    const totalBytes = new Blob([rawReports, rawRecycle]).size;
+    const estimatedKb = Math.round((totalBytes / 1024) * 10) / 10;
+    return {
+      activeCount: Array.isArray(active) ? active.length : 0,
+      recycleCount: Array.isArray(recycle) ? recycle.length : 0,
+      estimatedKb,
+      storageType: 'Local Storage (Perangkat Anda)',
+    };
+  } catch (e) {
+    return {
+      activeCount: 0,
+      recycleCount: 0,
+      estimatedKb: 0,
+      storageType: 'Local Storage (Perangkat Anda)',
+    };
+  }
+}
+
 export function getStoredReports(): AnalysisReport[] {
   try {
+    // One-time automatic purge of demo/seed reports
+    const demoPurged = localStorage.getItem(STORAGE_KEY_DEMO_PURGED);
+    if (!demoPurged) {
+      purgeAllDemoData();
+    }
+
     const raw = localStorage.getItem(STORAGE_KEY_REPORTS);
     if (!raw) {
-      const initial = createInitialSeedReports();
-      localStorage.setItem(STORAGE_KEY_REPORTS, JSON.stringify(initial));
-      return initial;
+      // Clean state: DO NOT pre-seed demo reports
+      localStorage.setItem(STORAGE_KEY_REPORTS, JSON.stringify([]));
+      return [];
     }
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed)) {
-      const sanitized = parsed.map(sanitizeStoredReport);
-      
-      // Ensure seed reports for revision comparison exist if user has not explicitly deleted them
-      const initial = createInitialSeedReports();
-      const recycle = getRecycleBinReports();
-      let modified = false;
-
-      initial.forEach((initRep) => {
-        const inActive = sanitized.some((r) => r.id === initRep.id);
-        const inRecycle = recycle.some((r) => r.id === initRep.id);
-        if (!inActive && !inRecycle) {
-          sanitized.push(initRep);
-          modified = true;
-        }
-      });
-
-      if (modified) {
+      // Strictly filter out any demo reports
+      const nonDemo = parsed.filter((r) => !isDemoReport(r));
+      const sanitized = nonDemo.map(sanitizeStoredReport);
+      if (nonDemo.length !== parsed.length) {
         localStorage.setItem(STORAGE_KEY_REPORTS, JSON.stringify(sanitized));
       }
-
       return sanitized;
     }
     return [];

@@ -18,6 +18,7 @@ import {
   User,
   GraduationCap,
   GitCompare,
+  HardDrive,
 } from 'lucide-react';
 import { AnalysisReport, PredicateType } from '../types/telaah';
 import { INSTRUMENT_DEFINITIONS } from '../data/instruments';
@@ -100,9 +101,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         <div className="absolute top-0 right-0 -mt-10 -mr-10 w-80 h-80 rounded-full bg-emerald-500/10 blur-3xl pointer-events-none" />
         <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
           <div className="max-w-2xl space-y-2">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 text-xs font-semibold">
-              <Sparkles className="w-3.5 h-3.5" />
-              Sistem Telaah Cerdas Pembelajaran Mendalam
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 text-xs font-semibold">
+                <Sparkles className="w-3.5 h-3.5" />
+                Sistem Telaah Cerdas Pembelajaran Mendalam
+              </div>
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-teal-500/20 border border-teal-400/30 text-teal-200 text-xs font-semibold">
+                <HardDrive className="w-3.5 h-3.5" />
+                Penyimpanan Local Storage Perangkat
+              </div>
             </div>
             <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
               Dashboard Telaah Perencanaan Pembelajaran
