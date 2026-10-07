@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { SAMPLE_DOCUMENTS, SampleDocumentItem } from '../data/sampleDocuments';
 import { AnalysisReport } from '../types/telaah';
-import { AppSettings } from '../utils/storage';
+import { AppSettings, AiConfiguration, DEFAULT_AI_CONFIG } from '../utils/storage';
 import { calculateSummary, buildPriorities, buildIncompatibilities } from '../data/instruments';
 import { getTodayIsoDate, toIsoDate, formatIndonesianDate } from '../utils/date';
 import { purgeProfilPelajarPancasila, detectSchoolName } from '../utils/textPurge';
@@ -34,10 +34,11 @@ interface NewAnalysisViewProps {
 
 const ANALYSIS_STEPS = [
   'Membaca dokumen dan struktur teks...',
-  'Mengekstrak teks & memetakan komponen kurikulum...',
-  'Mengidentifikasi identitas RPP (Guru, Sekolah/Madrasah, Mapel, Alokasi)...',
-  'Menganalisis 22 indikator Pembelajaran Mendalam...',
-  'Memeriksa bukti temuan otentik dalam dokumen...',
+  'Menghubungkan ke Mesin AI Google Gemini...',
+  'Mengekstrak naskah & memetakan komponen kurikulum...',
+  'Mengidentifikasi identitas RPP (Guru, Sekolah/Madrasah, Mapel)...',
+  'Menganalisis 22 indikator Pembelajaran Mendalam secara kontekstual...',
+  'Mengekstrak bukti temuan otentik & kutipan naskah...',
   'Menilai skor 0, 1, 2, atau N/A pada komponen opsional...',
   'Menyusun komentar kritis spesifik berbasis temuan...',
   'Merumuskan rekomendasi perbaikan instruksional...',
@@ -45,7 +46,7 @@ const ANALYSIS_STEPS = [
   'Menentukan predikat mutu dan kategori tindak lanjut...',
   'Menyusun umpan balik otomatis (kelebihan & perbaikan)...',
   'Memetakan prioritas perbaikan (Sangat Tinggi, Tinggi, Sedang)...',
-  'Melakukan validasi akhir hasil telaah...',
+  'Finalisasi laporan hasil telaah resmi...',
 ];
 
 export const NewAnalysisView: React.FC<NewAnalysisViewProps> = ({
@@ -70,6 +71,9 @@ export const NewAnalysisView: React.FC<NewAnalysisViewProps> = ({
   const [reviewerNipInput, setReviewerNipInput] = useState<string>(settings.defaultReviewerNip || '19750812 200003 1 004');
   const [teacherNipInput, setTeacherNipInput] = useState<string>(preFillTeacherInfo?.teacherNip || '');
 
+  // AI Configuration state
+  const [aiConfig, setAiConfig] = useState<AiConfiguration>(settings.aiConfig || DEFAULT_AI_CONFIG);
+
   React.useEffect(() => {
     if (preFillTeacherInfo?.teacherNip) {
       setTeacherNipInput(preFillTeacherInfo.teacherNip);
@@ -82,6 +86,9 @@ export const NewAnalysisView: React.FC<NewAnalysisViewProps> = ({
     }
     if (settings.defaultReviewerNip) {
       setReviewerNipInput(settings.defaultReviewerNip);
+    }
+    if (settings.aiConfig) {
+      setAiConfig(settings.aiConfig);
     }
   }, [settings]);
 
@@ -162,6 +169,7 @@ export const NewAnalysisView: React.FC<NewAnalysisViewProps> = ({
         reviewerNip: reviewerNipInput || settings.defaultReviewerNip,
         teacherNip: teacherNipInput,
         uploadDate: formattedDate,
+        aiConfig,
       };
 
       if (selectedFile) {
@@ -177,6 +185,7 @@ export const NewAnalysisView: React.FC<NewAnalysisViewProps> = ({
       }
 
       let aiData: any = null;
+      let resolvedEngine = aiConfig.enabled ? `Google Gemini (${aiConfig.model})` : 'Mesin Analisis Heuristik Internal';
 
       try {
         const response = await fetch('/api/analyze-rpp', {
@@ -193,6 +202,9 @@ export const NewAnalysisView: React.FC<NewAnalysisViewProps> = ({
           const resJson = await response.json().catch(() => null);
           if (resJson && resJson.success && resJson.data) {
             aiData = resJson.data;
+            if (resJson.engine) {
+              resolvedEngine = resJson.engine;
+            }
           }
         }
       } catch (fetchErr: any) {
@@ -310,6 +322,12 @@ export const NewAnalysisView: React.FC<NewAnalysisViewProps> = ({
         feedback,
         reviewDescription: purgeProfilPelajarPancasila(aiData.reviewDescription || 'Analisis telah selesai dilaksanakan.'),
         priorities,
+        aiEngine: resolvedEngine,
+        aiConfigSnapshot: {
+          model: aiConfig.model,
+          strictness: aiConfig.strictness,
+          focus: aiConfig.focus,
+        },
       };
 
       setCurrentStepIndex(ANALYSIS_STEPS.length - 1);
@@ -515,6 +533,113 @@ export const NewAnalysisView: React.FC<NewAnalysisViewProps> = ({
             </div>
           </div>
 
+          {/* Konfigurasi Mesin AI Otomatis (Google Gemini) */}
+          <div className="bg-gradient-to-br from-emerald-50/90 via-teal-50/50 to-white rounded-2xl p-4 border border-emerald-200/90 shadow-xs space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-xs">
+                  <Sparkles className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-xs font-black text-emerald-950 uppercase tracking-tight">
+                    Konfigurasi AI Otomatis
+                  </h3>
+                  <p className="text-[10px] text-emerald-700">
+                    Mesin Google Gemini • 22 Indikator
+                  </p>
+                </div>
+              </div>
+
+              <label className="inline-flex items-center gap-1.5 cursor-pointer bg-white px-2.5 py-1 rounded-xl border border-emerald-300 text-xs shadow-xs">
+                <input
+                  type="checkbox"
+                  checked={aiConfig.enabled}
+                  onChange={(e) => setAiConfig({ ...aiConfig, enabled: e.target.checked })}
+                  className="rounded text-emerald-600 focus:ring-emerald-500 h-3.5 w-3.5"
+                />
+                <span className="font-bold text-[11px] text-emerald-900">
+                  {aiConfig.enabled ? 'AI Aktif' : 'Nonaktif'}
+                </span>
+              </label>
+            </div>
+
+            {aiConfig.enabled ? (
+              <div className="space-y-2.5 pt-2 border-t border-emerald-100/90 text-xs">
+                <div className="flex items-center justify-between text-[11px] font-semibold text-emerald-900 bg-white/90 p-2 rounded-xl border border-emerald-100 shadow-2xs">
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <span>Status: <strong>AI Siap Menganalisis</strong></span>
+                  </span>
+                  <span className="font-mono text-[10px] text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded-lg">
+                    {aiConfig.model}
+                  </span>
+                </div>
+
+                <div className="space-y-2">
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                      Pilihan Model AI:
+                    </label>
+                    <select
+                      value={aiConfig.model}
+                      onChange={(e) => setAiConfig({ ...aiConfig, model: e.target.value as any })}
+                      className="w-full text-xs font-semibold px-2.5 py-1.5 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
+                    >
+                      <option value="gemini-3.8-flash">Google Gemini 3.8 Flash (Direkomendasikan)</option>
+                      <option value="gemini-flash-latest">Google Gemini Flash Latest (Versi Terbaru)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                      Tingkat Ketelitian Asesor:
+                    </label>
+                    <select
+                      value={aiConfig.strictness}
+                      onChange={(e) => setAiConfig({ ...aiConfig, strictness: e.target.value as any })}
+                      className="w-full text-xs px-2.5 py-1.5 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
+                    >
+                      <option value="standar">Standar Nasional (Objektif &amp; Berimbang)</option>
+                      <option value="ketat">Ketat &amp; Standar Asesor Tinggi (Kritis)</option>
+                      <option value="pembinaan">Fasilitatif &amp; Pembinaan Guru (Suportif)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                      Fokus Pedagogis Utama:
+                    </label>
+                    <select
+                      value={aiConfig.focus}
+                      onChange={(e) => setAiConfig({ ...aiConfig, focus: e.target.value as any })}
+                      className="w-full text-xs px-2.5 py-1.5 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
+                    >
+                      <option value="seimbang">Seimbang (Menyeluruh 22 Indikator)</option>
+                      <option value="diferensiasi">Kesiapan &amp; Diferensiasi Murid</option>
+                      <option value="kktp_keselarasan">Keselarasan Tujuan &amp; Rubrik KKTP</option>
+                      <option value="deep_learning">3 Pilar Deep Learning</option>
+                      <option value="dimensi_profil">Integrasi Dimensi Profil Lulusan</option>
+                    </select>
+                  </div>
+
+                  <label className="flex items-center gap-2 cursor-pointer pt-1 text-[11px] text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={aiConfig.extractQuotes}
+                      onChange={(e) => setAiConfig({ ...aiConfig, extractQuotes: e.target.checked })}
+                      className="rounded text-emerald-600 focus:ring-emerald-500 h-3.5 w-3.5"
+                    />
+                    <span className="font-semibold">Kutip bukti kalimat autentik dari naskah RPP</span>
+                  </label>
+                </div>
+              </div>
+            ) : (
+              <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-[11px] text-amber-800">
+                Mode AI dinonaktifkan. Sistem akan menggunakan evaluator heuristik internal.
+              </div>
+            )}
+          </div>
+
           {/* Tanggal Telaah & Konfigurasi Identitas Penelaah / Guru */}
           <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200/80 space-y-3.5">
             <div>
@@ -662,12 +787,12 @@ export const NewAnalysisView: React.FC<NewAnalysisViewProps> = ({
           {analysisStatus === 'analyzing' ? (
             <>
               <Loader2 className="w-5 h-5 animate-spin" />
-              <span>Memproses Telaah AI...</span>
+              <span>Memproses Telaah dengan {aiConfig.enabled ? 'AI Gemini' : 'Sistem'}...</span>
             </>
           ) : (
             <>
               <Sparkles className="w-5 h-5" />
-              <span>ANALISIS RPP / MODUL AJAR</span>
+              <span>{aiConfig.enabled ? 'TELAAH OTOMATIS DENGAN AI' : 'ANALISIS RPP / MODUL AJAR'}</span>
               <ArrowRight className="w-5 h-5" />
             </>
           )}

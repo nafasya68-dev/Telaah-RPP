@@ -109,4 +109,10 @@ export interface AnalysisReport {
   feedback: FeedbackData;
   reviewDescription: string;
   priorities: ImprovementPriority[];
+  aiEngine?: string;
+  aiConfigSnapshot?: {
+    model: string;
+    strictness: string;
+    focus: string;
+  };
 }

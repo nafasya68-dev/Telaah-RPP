@@ -1017,7 +1017,17 @@ app.get('/api/health', (_req: Request, res: Response) => {
 // Primary analysis endpoint
 app.post('/api/analyze-rpp', async (req: Request, res: Response) => {
   try {
-    const { fileBase64, mimeType, fileName, documentText, reviewerName, reviewerNip, teacherNip, uploadDate } = req.body;
+    const {
+      fileBase64,
+      mimeType,
+      fileName,
+      documentText,
+      reviewerName,
+      reviewerNip,
+      teacherNip,
+      uploadDate,
+      aiConfig,
+    } = req.body;
 
     if (!fileBase64 && !documentText) {
       res.status(400).json({ error: 'Dokumen belum disertakan (membutuhkan fileBase64 atau documentText).' });
@@ -1086,57 +1096,101 @@ app.post('/api/analyze-rpp', async (req: Request, res: Response) => {
     }
 
     let finalReportData: any = null;
+    let usedEngine = 'Mesin Analisis Heuristik Internal';
 
-    // Helper timeout wrapper to prevent long hanging requests
-    const withTimeout = <T>(promise: Promise<T>, ms: number): Promise<T> =>
-      Promise.race([
-        promise,
-        new Promise<T>((_, reject) => setTimeout(() => reject(new Error(`Timeout exceeding ${ms}ms`)), ms)),
-      ]);
+    // Check if AI is explicitly disabled
+    const isAiEnabled = aiConfig?.enabled !== false;
 
-    // Use fast and standard multimodal models
-    const candidateModels = ['gemini-2.5-flash', 'gemini-2.5-pro'];
-    for (const modelName of candidateModels) {
-      if (finalReportData) break;
-      try {
-        if (contentsParts.length > 0) {
-          console.log(`Menjalankan analisis AI dengan model: ${modelName}`);
-          const generatePromise = ai.models.generateContent({
-            model: modelName,
-            contents: contentsParts,
-            config: {
-              systemInstruction: ANALYSIS_SYSTEM_PROMPT,
-              responseMimeType: 'application/json',
-              temperature: 0.1,
-              maxOutputTokens: 8192,
-            },
-          });
+    if (isAiEnabled) {
+      // Helper timeout wrapper to prevent long hanging requests
+      const withTimeout = <T>(promise: Promise<T>, ms: number): Promise<T> =>
+        Promise.race([
+          promise,
+          new Promise<T>((_, reject) => setTimeout(() => reject(new Error(`Timeout exceeding ${ms}ms`)), ms)),
+        ]);
 
-          // Timeout 15 detik agar koneksi HTTP tidak terputus
-          const response = await withTimeout(generatePromise, 15000);
+      // Determine model preference from configuration
+      const preferredModel = (aiConfig?.model as string) || 'gemini-3.8-flash';
+      const candidateModels = [
+        preferredModel,
+        preferredModel === 'gemini-3.8-flash' ? 'gemini-flash-latest' : 'gemini-3.8-flash',
+      ];
 
-          const rawOutput = response.text || '';
-          const parsed = extractJsonFromText(rawOutput);
-          finalReportData = normalizeAnalysisResult(parsed, reviewerName, uploadDate, extractedDocText || documentText || '');
-          if (finalReportData && finalReportData.indicators?.length === 22) {
-            console.log(`Analisis berhasil diselesaikan oleh ${modelName}`);
-            break;
+      // Build customized dynamic prompt according to aiConfig
+      let customSystemPrompt = ANALYSIS_SYSTEM_PROMPT;
+
+      if (aiConfig?.strictness === 'ketat') {
+        customSystemPrompt += `\n\nINSTRUKSI TINGKAT KETELITIAN: **KETAT & STANDAR ASESOR TINGGI**.\nEvaluasi setiap indikator secara kritis. Berikan skor 2 hanya jika bukti sangat lengkap, terstruktur, dan konsisten. Jika ada ketidakselarasan, berikan skor 1 atau 0 dengan alasan pedagogis yang tegas.`;
+      } else if (aiConfig?.strictness === 'pembinaan') {
+        customSystemPrompt += `\n\nINSTRUKSI TINGKAT KETELITIAN: **FASILITATIF & PEMBINAAN GURU**.\nFokus pada masukan pedagogis yang membangun, apresiasi inovasi guru, serta saran perbaikan langkah demi langkah yang ramah guru.`;
+      }
+
+      if (aiConfig?.focus === 'diferensiasi') {
+        customSystemPrompt += `\n\nFOKUS PEDAGOGIS KHUSUS: Prioritaskan penelaahan pada diferensiasi pembelajaran, pemetaan kesiapan belajar (Indikator 2), karakteristik murid (Indikator 17), dan pemenuhan kebutuhan belajar murid.`;
+      } else if (aiConfig?.focus === 'kktp_keselarasan') {
+        customSystemPrompt += `\n\nFOKUS PEDAGOGIS KHUSUS: Prioritaskan keselarasan Tujuan Pembelajaran (Indikator 7), Langkah Kegiatan (Indikator 8), serta Asesmen & Rubrik KKTP (Indikator 5, 6, 21).`;
+      } else if (aiConfig?.focus === 'deep_learning') {
+        customSystemPrompt += `\n\nFOKUS PEDAGOGIS KHUSUS: Prioritaskan 3 Pilar Pembelajaran Mendalam (Indikator 12 Memahami, 13 Mengaplikasi, 14 Merefleksi, serta 15 Saling Memuliakan & 16 Prinsip Deep Learning).`;
+      } else if (aiConfig?.focus === 'dimensi_profil') {
+        customSystemPrompt += `\n\nFOKUS PEDAGOGIS KHUSUS: Prioritaskan integrasi Dimensi Profil Lulusan pada tujuan dan alur kegiatan belajar (Indikator 4 & 5).`;
+      }
+
+      if (aiConfig?.extractQuotes) {
+        customSystemPrompt += `\n\nKEWAJIBAN BUKTI AUTENTIK: Pada kolom 'evidence' di setiap indikator, WAJIB sertakan kutipan teks asli dari dokumen (contoh: "Tercantum kutipan: '...'").`;
+      }
+
+      for (const modelName of candidateModels) {
+        if (finalReportData) break;
+        try {
+          if (contentsParts.length > 0) {
+            console.log(`Menjalankan analisis AI dengan model: ${modelName} (Strictness: ${aiConfig?.strictness || 'standar'}, Focus: ${aiConfig?.focus || 'seimbang'})`);
+            const generatePromise = ai.models.generateContent({
+              model: modelName,
+              contents: contentsParts,
+              config: {
+                systemInstruction: customSystemPrompt,
+                responseMimeType: 'application/json',
+                temperature: 0.1,
+                maxOutputTokens: 8192,
+              },
+            });
+
+            // Timeout 30 detik agar model memiliki waktu cukup untuk menghasilkan analisis 22 indikator
+            const response = await withTimeout(generatePromise, 30000);
+
+            const rawOutput = response.text || '';
+            const parsed = extractJsonFromText(rawOutput);
+            finalReportData = normalizeAnalysisResult(parsed, reviewerName, uploadDate, extractedDocText || documentText || '');
+            if (finalReportData && finalReportData.indicators?.length === 22) {
+              console.log(`Analisis berhasil diselesaikan oleh ${modelName}`);
+              usedEngine = `Google Gemini (${modelName})`;
+              break;
+            }
           }
+        } catch (geminiError: any) {
+          console.warn(`Model ${modelName} mengalami kendala:`, geminiError.message || geminiError);
         }
-      } catch (geminiError: any) {
-        console.warn(`Model ${modelName} mengalami kendala:`, geminiError.message || geminiError);
       }
     }
 
     if (!finalReportData) {
       console.log('Menggunakan evaluator heuristik sebagai jaring pengaman analisis.');
-      finalReportData = performRuleBasedAnalysis(extractedDocText || documentText || fileName, fileName, reviewerName, uploadDate);
+      finalReportData = performRuleBasedAnalysis(
+        extractedDocText || documentText || fileName,
+        fileName,
+        reviewerName,
+        uploadDate,
+        reviewerNip,
+        teacherNip
+      );
+      usedEngine = 'Mesin Analisis Heuristik Internal (Fallback)';
     }
 
     res.json({
       success: true,
       data: finalReportData,
       fileName,
+      engine: usedEngine,
     });
   } catch (error: any) {
     console.error('Fatal error in /api/analyze-rpp:', error);
@@ -1154,6 +1208,7 @@ app.post('/api/analyze-rpp', async (req: Request, res: Response) => {
       data: fallback,
       fileName: req.body?.fileName || 'Dokumen_RPP',
       fallbackNotice: true,
+      engine: 'Mesin Analisis Heuristik Internal (Resilient Fallback)',
     });
   }
 });

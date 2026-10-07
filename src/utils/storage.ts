@@ -33,11 +33,28 @@ export function isDemoReport(report: AnalysisReport): boolean {
   return false;
 }
 
+export interface AiConfiguration {
+  enabled: boolean;
+  model: 'gemini-3.8-flash' | 'gemini-flash-latest';
+  strictness: 'standar' | 'ketat' | 'pembinaan';
+  focus: 'seimbang' | 'diferensiasi' | 'kktp_keselarasan' | 'dimensi_profil' | 'deep_learning';
+  extractQuotes: boolean;
+}
+
+export const DEFAULT_AI_CONFIG: AiConfiguration = {
+  enabled: true,
+  model: 'gemini-3.8-flash',
+  strictness: 'standar',
+  focus: 'seimbang',
+  extractQuotes: true,
+};
+
 export interface AppSettings {
   defaultReviewerName: string;
   defaultReviewerNip: string;
   defaultInstitution: string;
   autoSaveEdits: boolean;
+  aiConfig: AiConfiguration;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -45,6 +62,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   defaultReviewerNip: '19750812 200003 1 004',
   defaultInstitution: 'Dinas Pendidikan & Kebudayaan / Pengawas Sekolah',
   autoSaveEdits: true,
+  aiConfig: DEFAULT_AI_CONFIG,
 };
 
 function sanitizeStoredReport(rep: AnalysisReport): AnalysisReport {
@@ -351,7 +369,15 @@ export function getAppSettings(): AppSettings {
   try {
     const raw = localStorage.getItem(STORAGE_KEY_SETTINGS);
     if (!raw) return DEFAULT_SETTINGS;
-    return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
+    const parsed = JSON.parse(raw);
+    return {
+      ...DEFAULT_SETTINGS,
+      ...parsed,
+      aiConfig: {
+        ...DEFAULT_AI_CONFIG,
+        ...(parsed.aiConfig || {}),
+      },
+    };
   } catch (e) {
     return DEFAULT_SETTINGS;
   }

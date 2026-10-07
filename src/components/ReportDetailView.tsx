@@ -218,9 +218,17 @@ export const ReportDetailView: React.FC<ReportDetailViewProps> = ({
           <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
             {identity.title || report.fileName}
           </h1>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Satuan Pendidikan: <strong className="text-slate-700">{identity.school || '-'}</strong> | Guru: <strong className="text-slate-700">{identity.teacherName || '-'}</strong>
-          </p>
+          <div className="flex flex-wrap items-center gap-2 mt-1">
+            <p className="text-xs text-slate-500">
+              Satuan Pendidikan: <strong className="text-slate-700">{identity.school || '-'}</strong> | Guru: <strong className="text-slate-700">{identity.teacherName || '-'}</strong>
+            </p>
+            {report.aiEngine && (
+              <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
+                <Sparkles className="w-3 h-3 text-emerald-600" />
+                Dianalisis: {report.aiEngine}
+              </span>
+            )}
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">

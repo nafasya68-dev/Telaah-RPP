@@ -14,9 +14,15 @@ import {
   HardDrive,
   ShieldCheck,
   AlertTriangle,
+  Bot,
+  Cpu,
+  Zap,
+  CheckCircle2,
+  Sliders,
 } from 'lucide-react';
 import {
   AppSettings,
+  DEFAULT_AI_CONFIG,
   saveAppSettings,
   saveReports,
   purgeAllDemoData,
@@ -38,9 +44,46 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   reports,
   onReloadReports,
 }) => {
-  const [formData, setFormData] = useState<AppSettings>({ ...settings });
+  const [formData, setFormData] = useState<AppSettings>({
+    ...settings,
+    aiConfig: {
+      ...DEFAULT_AI_CONFIG,
+      ...(settings.aiConfig || {}),
+    },
+  });
   const [savedToast, setSavedToast] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string>('');
+  const [isTestingAi, setIsTestingAi] = useState<boolean>(false);
+  const [aiTestResult, setAiTestResult] = useState<{ ok: boolean; message: string } | null>(null);
+
+  const testAiConnection = async () => {
+    setIsTestingAi(true);
+    setAiTestResult(null);
+    try {
+      const startTime = Date.now();
+      const res = await fetch('/api/health');
+      const data = await res.json();
+      const latency = Date.now() - startTime;
+      if (res.ok && data.status === 'ok') {
+        setAiTestResult({
+          ok: true,
+          message: `Koneksi AI Gemini Normal! Latensi: ${latency}ms | Model Siap: ${formData.aiConfig.model}`,
+        });
+      } else {
+        setAiTestResult({
+          ok: false,
+          message: 'Server merespons tetapi status tidak siap.',
+        });
+      }
+    } catch (e: any) {
+      setAiTestResult({
+        ok: false,
+        message: 'Gagal terhubung ke endpoint AI server: ' + (e.message || 'Network error'),
+      });
+    } finally {
+      setIsTestingAi(false);
+    }
+  };
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -189,13 +232,182 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </div>
         </div>
 
+        {/* Konfigurasi Mesin AI (Google Gemini) */}
+        <div className="pt-5 border-t border-slate-200 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-bold text-slate-900 uppercase tracking-tight flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-emerald-600" />
+                Konfigurasi Mesin AI Analisis Otomatis
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Pengaturan model Google Gemini dan parameter telaah 22 indikator
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={testAiConnection}
+                disabled={isTestingAi}
+                className="px-3 py-1.5 text-xs font-semibold rounded-xl border border-slate-300 hover:border-emerald-500 bg-white hover:bg-emerald-50 text-slate-700 hover:text-emerald-800 transition-colors flex items-center gap-1.5 shadow-xs"
+              >
+                <Zap className={`w-3.5 h-3.5 ${isTestingAi ? 'animate-spin text-amber-500' : 'text-emerald-600'}`} />
+                {isTestingAi ? 'Menguji...' : 'Uji Koneksi AI'}
+              </button>
+
+              <label className="inline-flex items-center gap-2 cursor-pointer bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
+                <input
+                  type="checkbox"
+                  checked={formData.aiConfig.enabled}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      aiConfig: { ...formData.aiConfig, enabled: e.target.checked },
+                    })
+                  }
+                  className="rounded text-emerald-600 focus:ring-emerald-500 h-4 w-4"
+                />
+                <span className="text-xs font-bold text-slate-800">
+                  {formData.aiConfig.enabled ? 'AI Aktif' : 'AI Nonaktif'}
+                </span>
+              </label>
+            </div>
+          </div>
+
+          {aiTestResult && (
+            <div
+              className={`p-3 rounded-2xl text-xs flex items-center gap-2 ${
+                aiTestResult.ok
+                  ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                  : 'bg-rose-50 text-rose-800 border border-rose-200'
+              }`}
+            >
+              {aiTestResult.ok ? (
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              ) : (
+                <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+              )}
+              <span>{aiTestResult.message}</span>
+            </div>
+          )}
+
+          {formData.aiConfig.enabled && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs pt-1">
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">
+                  Model AI Utama
+                </label>
+                <select
+                  value={formData.aiConfig.model}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      aiConfig: {
+                        ...formData.aiConfig,
+                        model: e.target.value as 'gemini-3.8-flash' | 'gemini-flash-latest',
+                      },
+                    })
+                  }
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium focus:ring-2 focus:ring-emerald-500"
+                >
+                  <option value="gemini-3.8-flash">Google Gemini 3.8 Flash (Direkomendasikan - Cepat &amp; Akurat)</option>
+                  <option value="gemini-flash-latest">Google Gemini Flash Latest (Versi Terbaru)</option>
+                </select>
+                <p className="text-[11px] text-slate-500 mt-1">
+                  Model multimodal canggih untuk membaca dan mengevaluasi naskah dokumen PDF/DOCX.
+                </p>
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">
+                  Tingkat Ketelitian Asesmen (Strictness)
+                </label>
+                <select
+                  value={formData.aiConfig.strictness}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      aiConfig: {
+                        ...formData.aiConfig,
+                        strictness: e.target.value as 'standar' | 'ketat' | 'pembinaan',
+                      },
+                    })
+                  }
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium focus:ring-2 focus:ring-emerald-500"
+                >
+                  <option value="standar">Standar Kurikulum Nasional (Objektif &amp; Berimbang)</option>
+                  <option value="ketat">Ketat &amp; Standar Asesor Tinggi (Analisis Kritis Mendalam)</option>
+                  <option value="pembinaan">Fasilitatif &amp; Pembinaan Guru (Suportif &amp; Bertahap)</option>
+                </select>
+                <p className="text-[11px] text-slate-500 mt-1">
+                  Mengatur ketajaman penilaian dan gaya kritik pedagogis dari AI.
+                </p>
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">
+                  Fokus Pedagogis Telaah
+                </label>
+                <select
+                  value={formData.aiConfig.focus}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      aiConfig: {
+                        ...formData.aiConfig,
+                        focus: e.target.value as any,
+                      },
+                    })
+                  }
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium focus:ring-2 focus:ring-emerald-500"
+                >
+                  <option value="seimbang">Seimbang (Menyeluruh pada seluruh 22 Indikator)</option>
+                  <option value="diferensiasi">Kesiapan &amp; Pembelajaran Berdiferensiasi (Indikator 2 &amp; 17)</option>
+                  <option value="kktp_keselarasan">Keselarasan Tujuan, Langkah &amp; Rubrik KKTP (Indikator 5, 6, 21)</option>
+                  <option value="deep_learning">3 Pilar Deep Learning (Memahami, Mengaplikasi, Merefleksi)</option>
+                  <option value="dimensi_profil">Integrasi Dimensi Profil Lulusan (Indikator 4 &amp; 5)</option>
+                </select>
+                <p className="text-[11px] text-slate-500 mt-1">
+                  Memberikan arahan khusus bagi AI saat menelaah komponen prioritas.
+                </p>
+              </div>
+
+              <div className="flex flex-col justify-center">
+                <label className="inline-flex items-center gap-2 cursor-pointer mt-1">
+                  <input
+                    type="checkbox"
+                    checked={formData.aiConfig.extractQuotes}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        aiConfig: {
+                          ...formData.aiConfig,
+                          extractQuotes: e.target.checked,
+                        },
+                      })
+                    }
+                    className="rounded text-emerald-600 focus:ring-emerald-500 h-4 w-4"
+                  />
+                  <span className="font-bold text-slate-800">
+                    Wajib Kutip Bukti Kalimat Autentik dari RPP
+                  </span>
+                </label>
+                <p className="text-[11px] text-slate-500 mt-1 pl-6">
+                  AI akan menyalin kutipan kalimat langsung dari naskah sebagai bukti evaluasi setiap indikator.
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+
         <div className="pt-2 flex justify-end">
           <button
             type="submit"
             className="px-5 py-2.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-md transition-colors flex items-center gap-1.5"
           >
             <Save className="w-4 h-4" />
-            Simpan Profil Penelaah
+            Simpan Konfigurasi &amp; Profil
           </button>
         </div>
       </form>
