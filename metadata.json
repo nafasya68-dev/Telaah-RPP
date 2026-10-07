@@ -1,0 +1,6 @@
+{
+  "name": "Dashboard Telaah RPP / Modul Ajar Pembelajaran Mendalam",
+  "description": "Aplikasi telaah otomatis RPP dan Modul Ajar berdasarkan instrumen Pembelajaran Mendalam dengan 22 indikator, evaluasi kritis, rekomendasi, dan tindak lanjut.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
