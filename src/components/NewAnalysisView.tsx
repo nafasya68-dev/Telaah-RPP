@@ -15,6 +15,8 @@ import {
   GitCompare,
   ShieldCheck,
   HardDrive,
+  RotateCcw,
+  Trash2,
 } from 'lucide-react';
 import { SAMPLE_DOCUMENTS, SampleDocumentItem } from '../data/sampleDocuments';
 import { AnalysisReport } from '../types/telaah';
@@ -143,6 +145,16 @@ export const NewAnalysisView: React.FC<NewAnalysisViewProps> = ({
     setErrorMessage('');
   };
 
+  const handleClearSelectedDocument = () => {
+    setSelectedFile(null);
+    setFileBase64('');
+    setSelectedSample(null);
+    setCustomText('');
+    setAnalysisStatus('idle');
+    setErrorMessage('');
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
   const runAnalysis = async () => {
     if (!selectedFile && !selectedSample && !customText.trim()) {
       setErrorMessage('Pilih dokumen PDF/DOCX terlebih dahulu atau pilih naskah contoh RPP.');
@@ -162,6 +174,27 @@ export const NewAnalysisView: React.FC<NewAnalysisViewProps> = ({
       });
     }, 700);
 
+    let currentBase64 = fileBase64;
+    if (selectedFile && !currentBase64) {
+      try {
+        currentBase64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const res = reader.result as string;
+            resolve(res.split(',')[1] || res);
+          };
+          reader.onerror = () => reject(new Error('Gagal membaca berkas file lokal.'));
+          reader.readAsDataURL(selectedFile);
+        });
+        setFileBase64(currentBase64);
+      } catch (readErr: any) {
+        clearInterval(stepInterval);
+        setAnalysisStatus('error');
+        setErrorMessage(readErr.message || 'Gagal membaca berkas file lokal.');
+        return;
+      }
+    }
+
     try {
       const formattedDate = formatIndonesianDate(uploadDate);
       const payload: any = {
@@ -175,7 +208,7 @@ export const NewAnalysisView: React.FC<NewAnalysisViewProps> = ({
       if (selectedFile) {
         payload.fileName = selectedFile.name;
         payload.mimeType = selectedFile.type;
-        payload.fileBase64 = fileBase64;
+        payload.fileBase64 = currentBase64;
       } else if (selectedSample) {
         payload.fileName = `${selectedSample.title}.docx`;
         payload.documentText = selectedSample.content;
@@ -185,37 +218,58 @@ export const NewAnalysisView: React.FC<NewAnalysisViewProps> = ({
       }
 
       let aiData: any = null;
-      let resolvedEngine = aiConfig.enabled ? `Google Gemini (${aiConfig.model})` : 'Mesin Analisis Heuristik Internal';
+      let resolvedEngine = aiConfig.enabled ? `Google Gemini (${aiConfig.model})` : 'Mesin Analisis Heuristik Internal (Mode Manual)';
 
-      try {
-        const response = await fetch('/api/analyze-rpp', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-          },
-          body: JSON.stringify(payload),
-        });
+      if (aiConfig.enabled) {
+        let response: Response;
+        try {
+          response = await fetch('/api/analyze-rpp', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+            body: JSON.stringify(payload),
+          });
+        } catch (netErr: any) {
+          throw new Error(`Koneksi ke endpoint telaah gagal: ${netErr.message || 'Periksa koneksi internet server atau browser Anda.'}`);
+        }
 
         const contentType = response.headers.get('content-type') || '';
-        if (response.ok && contentType.includes('application/json')) {
-          const resJson = await response.json().catch(() => null);
-          if (resJson && resJson.success && resJson.data) {
-            aiData = resJson.data;
-            if (resJson.engine) {
-              resolvedEngine = resJson.engine;
+        if (!response.ok) {
+          let errorDetail = `Gagal memproses telaah dokumen (Status: ${response.status} ${response.statusText})`;
+          if (contentType.includes('application/json')) {
+            const errJson = await response.json().catch(() => null);
+            if (errJson && errJson.error) {
+              errorDetail = errJson.error;
+            }
+          } else {
+            if (response.status === 504) {
+              errorDetail = 'Batas waktu server terlampaui (504 Gateway Timeout). Mohon periksa koneksi atau coba beberapa saat lagi.';
+            } else if (response.status === 413) {
+              errorDetail = 'Ukuran berkas melebihi batas unggah server. Harap gunakan dokumen di bawah 4.5 MB.';
+            } else if (response.status === 404) {
+              errorDetail = 'Endpoint /api/analyze-rpp tidak ditemukan (404). Pastikan konfigurasi server Vercel aktif.';
             }
           }
+          throw new Error(errorDetail);
         }
-      } catch (fetchErr: any) {
-        console.warn('Notice on server fetch:', fetchErr?.message || fetchErr);
-      }
 
-      clearInterval(stepInterval);
+        if (!contentType.includes('application/json')) {
+          throw new Error('Respons server bukan JSON yang valid. Harap periksa server atau coba lagi.');
+        }
 
-      // Robust fallback engine: guarantees that non-JSON responses or server hiccups never crash the analysis
-      if (!aiData) {
-        console.log('Using robust internal analysis engine');
+        const resJson = await response.json();
+        if (!resJson || !resJson.success || !resJson.data) {
+          throw new Error(resJson?.error || 'Hasil telaah dari AI tidak valid atau tidak memuat data indikator.');
+        }
+
+        aiData = resJson.data;
+        if (resJson.engine) {
+          resolvedEngine = resJson.engine;
+        }
+      } else {
+        // User explicitly disabled AI in settings: use rule-based analyzer
         const rawTextToAnalyze = customText || selectedSample?.content || payload.fileName;
         aiData = generateLocalAnalysisData(
           rawTextToAnalyze,
@@ -226,6 +280,12 @@ export const NewAnalysisView: React.FC<NewAnalysisViewProps> = ({
           reviewerNipInput || settings.defaultReviewerNip,
           teacherNipInput
         );
+      }
+
+      clearInterval(stepInterval);
+
+      if (!aiData || !Array.isArray(aiData.indicators) || aiData.indicators.length === 0) {
+        throw new Error('Data indikator telaah tidak ditemukan dalam hasil pemrosesan.');
       }
 
       // Ensure calculations and formulas are strictly enforced
@@ -446,10 +506,21 @@ export const NewAnalysisView: React.FC<NewAnalysisViewProps> = ({
                 <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
                   Informasi Dokumen Terpilih
                 </span>
-                <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
-                  <CheckCircle2 className="w-3 h-3" />
-                  Siap Dianalisis
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                    <CheckCircle2 className="w-3 h-3" />
+                    Siap Dianalisis
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleClearSelectedDocument}
+                    className="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-rose-50 text-rose-700 hover:bg-rose-100 transition-colors cursor-pointer"
+                    title="Hapus atau ganti dokumen terpilih"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                    Ganti Dokumen
+                  </button>
+                </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
@@ -702,11 +773,22 @@ export const NewAnalysisView: React.FC<NewAnalysisViewProps> = ({
 
       {/* Error Message */}
       {errorMessage && (
-        <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 flex items-start gap-3 text-rose-800 text-xs">
-          <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-          <div className="flex-1">
-            <strong>Terjadi Kendala:</strong> {errorMessage}
+        <div className="p-5 rounded-2xl bg-rose-50 border border-rose-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-rose-800 text-xs shadow-xs animate-in fade-in">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-bold text-rose-900 text-sm">Gagal Melakukan Telaah RPP</p>
+              <p className="mt-1 text-rose-700 leading-relaxed">{errorMessage}</p>
+            </div>
           </div>
+          <button
+            type="button"
+            onClick={runAnalysis}
+            className="self-start sm:self-center shrink-0 inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 active:scale-95 rounded-xl shadow-xs transition-all cursor-pointer"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            Coba Lagi
+          </button>
         </div>
       )}
 
