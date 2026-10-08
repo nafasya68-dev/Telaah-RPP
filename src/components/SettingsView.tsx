@@ -238,7 +238,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             <div>
               <h3 className="text-sm font-bold text-slate-900 uppercase tracking-tight flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-emerald-600" />
-                Konfigurasi Mesin AI Analisis Otomatis
+                Konfigurasi Mesin Telaah Otomatis
               </h3>
               <p className="text-xs text-slate-500 mt-0.5">
                 Pengaturan model Google Gemini dan parameter telaah 22 indikator

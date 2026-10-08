@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Search,
   Filter,
@@ -16,10 +16,99 @@ import {
   CheckCircle2,
   FileText,
   GitCompare,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
 } from 'lucide-react';
 import { AnalysisReport, PredicateType } from '../types/telaah';
 import { ConfirmationModal } from './ConfirmationModal';
 import { printOrSavePdfReport, downloadDocxReport } from '../utils/export';
+
+const indoMonths: Record<string, number> = {
+  januari: 0,
+  februari: 1,
+  maret: 2,
+  april: 3,
+  mei: 4,
+  juni: 5,
+  juli: 6,
+  agustus: 7,
+  september: 8,
+  oktober: 9,
+  november: 10,
+  desember: 11,
+  jan: 0,
+  feb: 1,
+  mar: 2,
+  apr: 3,
+  jun: 5,
+  jul: 6,
+  agu: 7,
+  agt: 7,
+  sep: 8,
+  okt: 9,
+  nov: 10,
+  des: 11,
+};
+
+// Robust helper to parse Indonesian or ISO date to timestamp for accurate sorting
+export const parseReviewDateToTimestamp = (
+  dateStr?: string,
+  fallbackCreatedAt?: number | string
+): number => {
+  if (dateStr && typeof dateStr === 'string' && dateStr.trim()) {
+    const trimmed = dateStr.trim();
+
+    // Check if ISO format YYYY-MM-DD
+    const isoMatch = trimmed.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if (isoMatch) {
+      const parsed = new Date(
+        Number(isoMatch[1]),
+        Number(isoMatch[2]) - 1,
+        Number(isoMatch[3])
+      ).getTime();
+      if (!isNaN(parsed)) return parsed;
+    }
+
+    // Check if DD/MM/YYYY or DD-MM-YYYY
+    const dmyMatch = trimmed.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})/);
+    if (dmyMatch) {
+      const parsed = new Date(
+        Number(dmyMatch[3]),
+        Number(dmyMatch[2]) - 1,
+        Number(dmyMatch[1])
+      ).getTime();
+      if (!isNaN(parsed)) return parsed;
+    }
+
+    // Check Indonesian textual date e.g. "03 Oktober 2026", "3 Okt 2026"
+    const textMatch = trimmed.match(/^(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})/);
+    if (textMatch) {
+      const day = Number(textMatch[1]);
+      const mName = textMatch[2].toLowerCase();
+      const year = Number(textMatch[3]);
+      const monthIdx = indoMonths[mName];
+      if (monthIdx !== undefined) {
+        const parsed = new Date(year, monthIdx, day).getTime();
+        if (!isNaN(parsed)) return parsed;
+      }
+    }
+
+    const direct = Date.parse(trimmed);
+    if (!isNaN(direct)) return direct;
+  }
+
+  // Fallback to createdAt
+  if (typeof fallbackCreatedAt === 'number' && !isNaN(fallbackCreatedAt)) {
+    return fallbackCreatedAt;
+  }
+  if (typeof fallbackCreatedAt === 'string') {
+    const parsed = Date.parse(fallbackCreatedAt);
+    if (!isNaN(parsed)) return parsed;
+  }
+
+  return 0;
+};
 
 interface HistoryViewProps {
   reports: AnalysisReport[];
@@ -49,6 +138,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
   const [activeTab, setActiveTab] = useState<'active' | 'trash'>('active');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [predicateFilter, setPredicateFilter] = useState<string>('all');
+  const [sortDirection, setSortDirection] = useState<'desc' | 'asc'>('desc');
 
   // Single Delete Confirmation Modal State
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
@@ -108,6 +198,25 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
 
     return true;
   });
+
+  const sortedReports = useMemo(() => {
+    return [...filteredReports].sort((a, b) => {
+      const timeA = parseReviewDateToTimestamp(
+        a.identity?.reviewDate || a.identity?.uploadDate,
+        a.createdAt
+      );
+      const timeB = parseReviewDateToTimestamp(
+        b.identity?.reviewDate || b.identity?.uploadDate,
+        b.createdAt
+      );
+      if (timeA === timeB) {
+        const createdA = typeof a.createdAt === 'number' ? a.createdAt : 0;
+        const createdB = typeof b.createdAt === 'number' ? b.createdAt : 0;
+        return sortDirection === 'desc' ? createdB - createdA : createdA - createdB;
+      }
+      return sortDirection === 'desc' ? timeB - timeA : timeA - timeB;
+    });
+  }, [filteredReports, sortDirection]);
 
   return (
     <div className="max-w-7xl mx-auto space-y-6 animate-in fade-in duration-300">
@@ -205,25 +314,40 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
           />
         </div>
 
-        <div className="flex items-center gap-2 w-full sm:w-auto">
-          <span className="text-xs text-slate-500 font-medium">Filter Predikat:</span>
-          <select
-            value={predicateFilter}
-            onChange={(e) => setPredicateFilter(e.target.value)}
-            className="text-xs px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-700 focus:ring-2 focus:ring-emerald-500"
-          >
-            <option value="all">Semua Predikat</option>
-            <option value="SANGAT BAIK">Sangat Baik (86-100)</option>
-            <option value="BAIK">Baik (76-85)</option>
-            <option value="CUKUP">Cukup (66-75)</option>
-            <option value="PERLU PERBAIKAN">Perlu Perbaikan (≤65)</option>
-          </select>
+        <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-500 font-medium">Urutkan:</span>
+            <button
+              type="button"
+              onClick={() => setSortDirection((prev) => (prev === 'desc' ? 'asc' : 'desc'))}
+              className="text-xs px-3 py-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl font-bold text-slate-700 flex items-center gap-1.5 transition-colors shadow-2xs"
+              title="Klik untuk membalik urutan tanggal telaah"
+            >
+              <span>Tanggal Telaah ({sortDirection === 'desc' ? 'Terbaru ↓' : 'Terlama ↑'})</span>
+              <ArrowUpDown className="w-3.5 h-3.5 text-emerald-600" />
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-500 font-medium">Filter Predikat:</span>
+            <select
+              value={predicateFilter}
+              onChange={(e) => setPredicateFilter(e.target.value)}
+              className="text-xs px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-700 focus:ring-2 focus:ring-emerald-500"
+            >
+              <option value="all">Semua Predikat</option>
+              <option value="SANGAT BAIK">Sangat Baik (86-100)</option>
+              <option value="BAIK">Baik (76-85)</option>
+              <option value="CUKUP">Cukup (66-75)</option>
+              <option value="PERLU PERBAIKAN">Perlu Perbaikan (≤65)</option>
+            </select>
+          </div>
         </div>
       </div>
 
       {/* Table of Reports */}
       <div className="bg-white rounded-3xl border border-slate-200 shadow-xs overflow-hidden">
-        {filteredReports.length === 0 ? (
+        {sortedReports.length === 0 ? (
           <div className="p-12 text-center space-y-3">
             <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 mx-auto flex items-center justify-center">
               <FileText className="w-6 h-6" />
@@ -245,14 +369,27 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                   <th className="py-3.5 px-4 w-44">Guru &amp; Satuan Pendidikan</th>
                   <th className="py-3.5 px-4">Judul RPP / Modul Ajar</th>
                   <th className="py-3.5 px-4 w-32">Mapel &amp; Fase</th>
-                  <th className="py-3.5 px-3 w-28 text-center">Tanggal Telaah</th>
+                  <th
+                    className="py-3.5 px-3 w-32 text-center cursor-pointer hover:bg-slate-100 transition-colors select-none group"
+                    onClick={() => setSortDirection((prev) => (prev === 'desc' ? 'asc' : 'desc'))}
+                    title="Klik untuk mengubah urutan tanggal telaah"
+                  >
+                    <div className="inline-flex items-center justify-center gap-1.5 w-full">
+                      <span>Tanggal Telaah</span>
+                      {sortDirection === 'desc' ? (
+                        <ArrowDown className="w-3.5 h-3.5 text-emerald-600" />
+                      ) : (
+                        <ArrowUp className="w-3.5 h-3.5 text-emerald-600" />
+                      )}
+                    </div>
+                  </th>
                   <th className="py-3.5 px-3 w-24 text-center">Nilai</th>
                   <th className="py-3.5 px-3 w-32 text-center">Predikat</th>
                   <th className="py-3.5 px-4 w-36 text-center">Menu Aksi</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filteredReports.map((report) => {
+                {sortedReports.map((report) => {
                   const { identity, summary } = report;
                   const predBadge =
                     summary.predicate === 'SANGAT BAIK'

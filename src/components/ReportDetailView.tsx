@@ -932,29 +932,9 @@ export const ReportDetailView: React.FC<ReportDetailViewProps> = ({
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
-          {/* Guru Pengampu */}
-          <div className="p-5 rounded-2xl bg-slate-50/80 border border-slate-200 text-center flex flex-col justify-between min-h-[170px]">
-            <div>
-              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
-                Mengetahui / Mengonfirmasi,
-              </span>
-              <span className="text-xs font-semibold text-slate-700 block mt-0.5">
-                Guru Mata Pelajaran / Penyusun RPP
-              </span>
-            </div>
-            <div className="pt-10">
-              <strong className="text-xs font-bold text-slate-900 block">
-                {identity.teacherName || '( .................................................... )'}
-              </strong>
-              <span className="text-[11px] text-slate-600 font-mono block mt-0.5">
-                NIP. {identity.teacherNip || '......................................................'}
-              </span>
-            </div>
-          </div>
-
+        <div className="flex justify-end pt-2">
           {/* Penelaah / Asesor */}
-          <div className="p-5 rounded-2xl bg-emerald-50/50 border border-emerald-200 text-center flex flex-col justify-between min-h-[170px]">
+          <div className="w-full sm:w-80 p-5 rounded-2xl bg-emerald-50/50 border border-emerald-200 text-center flex flex-col justify-between min-h-[170px]">
             <div>
               <span className="text-[11px] font-bold text-emerald-800 uppercase tracking-wider block">
                 {identity.school ? identity.school.split(' ')[0] : 'Kota'}, {identity.reviewDate || identity.uploadDate || new Date().toLocaleDateString('id-ID')}

@@ -412,7 +412,7 @@ export const NewAnalysisView: React.FC<NewAnalysisViewProps> = ({
       <div className="border-b border-slate-200 pb-5">
         <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-semibold mb-2">
           <Sparkles className="w-3.5 h-3.5" />
-          Telaah Otomatis Berbasis Bukti
+          Telaah Otomatis
         </div>
         <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
           TELAAH RPP / MODUL AJAR BARU
@@ -613,7 +613,7 @@ export const NewAnalysisView: React.FC<NewAnalysisViewProps> = ({
                 </div>
                 <div>
                   <h3 className="text-xs font-black text-emerald-950 uppercase tracking-tight">
-                    Konfigurasi AI Otomatis
+                    Konfigurasi Telaah Otomatis
                   </h3>
                   <p className="text-[10px] text-emerald-700">
                     Mesin Google Gemini • 22 Indikator
@@ -869,12 +869,12 @@ export const NewAnalysisView: React.FC<NewAnalysisViewProps> = ({
           {analysisStatus === 'analyzing' ? (
             <>
               <Loader2 className="w-5 h-5 animate-spin" />
-              <span>Memproses Telaah dengan {aiConfig.enabled ? 'AI Gemini' : 'Sistem'}...</span>
+              <span>Memproses Telaah Otomatis...</span>
             </>
           ) : (
             <>
               <Sparkles className="w-5 h-5" />
-              <span>{aiConfig.enabled ? 'TELAAH OTOMATIS DENGAN AI' : 'ANALISIS RPP / MODUL AJAR'}</span>
+              <span>TELAAH OTOMATIS</span>
               <ArrowRight className="w-5 h-5" />
             </>
           )}

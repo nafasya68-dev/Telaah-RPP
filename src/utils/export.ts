@@ -400,13 +400,8 @@ function generatePrintableHtml(report: AnalysisReport): string {
       : ''
   }
 
-  <div class="signature-container">
-    <div class="signature-box">
-      <p>Mengetahui / Mengonfirmasi,<br>Guru Pengampu,</p>
-      <div class="signature-space"></div>
-      <p><strong>${identity.teacherName || '(..................................................)'}</strong><br>NIP. ${identity.teacherNip || '......................................................'}</p>
-    </div>
-    <div class="signature-box">
+  <div class="signature-container" style="justify-content: flex-end;">
+    <div class="signature-box" style="margin-left: auto;">
       <p>${identity.school ? identity.school.split(' ')[0] : 'Kota'}, ${identity.reviewDate || new Date().toLocaleDateString('id-ID')}<br>Penelaah / Asesor Pembelajaran,</p>
       <div class="signature-space"></div>
       <p><strong>${identity.reviewerName || '(..................................................)'}</strong><br>NIP. ${identity.reviewerNip || '......................................................'}</p>
@@ -654,13 +649,9 @@ function generateWordHtml(report: AnalysisReport): string {
   }
 
   <br><br>
-  <table style="border: none;">
+  <table style="border: none; width: 100%;">
     <tr style="border: none;">
-      <td width="50%" align="center" style="border: none;">
-        Mengetahui,<br>Guru Mata Pelajaran,<br><br><br><br>
-        <b>${identity.teacherName || '(..................................................)'}</b><br>
-        NIP. ${identity.teacherNip || '......................................................'}
-      </td>
+      <td width="50%" style="border: none;"></td>
       <td width="50%" align="center" style="border: none;">
         ${identity.school ? identity.school.split(' ')[0] : 'Kota'}, ${identity.reviewDate || new Date().toLocaleDateString('id-ID')}<br>
         Penelaah / Asesor Pembelajaran,<br><br><br><br>
@@ -895,11 +886,7 @@ function generatePrintableComparisonHtml(beforeReport: AnalysisReport, afterRepo
   <br>
   <table style="border: none; width: 100%; margin-top: 20px;">
     <tr style="border: none;">
-      <td width="50%" align="center" style="border: none;">
-        Mengetahui,<br>Guru Mata Pelajaran / Pemilik RPP,<br><br><br><br>
-        <b>${teacher}</b><br>
-        NIP. ${teacherNip || '......................................................'}
-      </td>
+      <td width="50%" style="border: none;"></td>
       <td width="50%" align="center" style="border: none;">
         ${school ? school.split(' ')[0] : 'Kota'}, ${afterReport.identity.reviewDate || new Date().toLocaleDateString('id-ID')}<br>
         Penelaah / Asesor Supervisi Akademik,<br><br><br><br>
